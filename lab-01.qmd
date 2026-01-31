@@ -1,0 +1,109 @@
+---
+title: "Lab 1"
+author: "Andre Gala-Garza"
+format: html
+editor: visual
+embed-resources: true
+fig-width: 8
+fig-height: 6
+theme: cerulean
+---
+
+```{r}
+library(datasauRus)
+```
+
+## Question 1
+
+```{r}
+?datasaurus_dozen
+```
+
+From the help file for the Datasaurus Dozen dataset, we find that there are 1846 rows and three columns (variables) in the dataset. The three variables are "dataset", which indicates where the data is coming from, "x" for the x-values, and "y" for the y-values, allowing the data to be plotted on a 2D Cartesian plane.
+
+```{r}
+table(datasaurus_dozen$dataset)
+```
+This table shows the frequency of data points per dataset in the Datasaurus Dozen. Interestingly, there are 142 points in each of 13 datasets for a total of 142 * 13 = 1846 rows, so the Datasaurus Dozen is actually a baker's dozen.
+
+## Question 2
+We set dino_data as the subset of the Datasaurus Dozen where the "dataset" variable is equal to "dino":
+```{r}
+dino_data <- datasaurus_dozen[datasaurus_dozen$dataset == 'dino', ]
+```
+
+We then plot the "x" variable against the "y" variable in this subset:
+```{r}
+plot(dino_data$x, dino_data$y)
+# ggplot(data = dino_data, mapping = aes(x = x, y = y)) +
+#   geom_point()
+```
+We then calculate the correlation coefficient of the data:
+```{r}
+cor(dino_data$x, dino_data$y)
+# dino_data |>
+#   summarize(r = cor(x, y))
+```
+
+## Question 3
+
+We now repeat this procedure with the "star" dataset:
+
+```{r}
+star_data <- datasaurus_dozen[datasaurus_dozen$dataset == 'star', ]
+plot(star_data$x, star_data$y)
+```
+```{r}
+cor(star_data$x, star_data$y)
+```
+
+```{r}
+cor(dino_data$x, dino_data$y)
+```
+
+As verified by the Datasaurus Dozen help file, we find that the correlation coefficient for the "star" dataset is roughly equal to that of "dino", although not exactly equal; the "star" coefficient is roughly 0.002 units less negative.
+
+## Question 4
+We now repeat this procedure with the "circle" dataset:
+
+```{r}
+circle_data <- datasaurus_dozen[datasaurus_dozen$dataset == 'circle', ]
+plot(circle_data$x, circle_data$y)
+```
+```{r}
+cor(circle_data$x, circle_data$y)
+```
+
+```{r}
+cor(dino_data$x, dino_data$y)
+```
+
+There is a slightly more significant difference between the Pearson's correlation coefficient for "dino" vs. "circle"; this time, the "circle" coefficient is roughly 0.004 units more negative.
+
+
+## Question 5
+
+We now create a matrix to allow us to plot all 13 datasets at once:
+
+```{r}
+#| fig-height: 12
+#| fig-width: 12
+layout(matrix(1:16, nrow=4, ncol=4))
+par(mar = c(2,2,2,2))
+for(name in unique(datasaurus_dozen$dataset)){
+  subset <- datasaurus_dozen[datasaurus_dozen$dataset == name, ]
+  plot(subset$x, subset$y, main = name)
+}
+layout(1)
+par(mar = c(5,4,4,2) + 0.1)
+```
+## Question 6
+
+We now calculate the correlation coefficient between x and y for all 13 datasets:
+
+```{r}
+sapply(unique(datasaurus_dozen$dataset), function(name){
+    subset <- datasaurus_dozen[datasaurus_dozen$dataset == name, ]
+    return(cor(subset$x, subset$y))
+})
+```

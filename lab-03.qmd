@@ -1,0 +1,273 @@
+---
+title: "biostat-620-lab-3"
+format: html
+editor: visual
+---
+
+# 1. Read in the data
+
+```{r}
+met <- read.csv("C:/Temp/met_all.gz")
+```
+
+# 2. Check the dimensions, headers, footers
+
+```{r}
+dim(met)
+```
+
+```{r}
+nrow(met)
+```
+
+```{r}
+ncol(met)
+```
+
+From the results of dim(), nrow(), and ncol(), there are 2,377,343 records (rows) and 30 variables (columns) in this dataset.
+
+# 3. Take a look at all of the variables
+
+```{r}
+str(met)
+```
+
+From the results of str(), we see that "met" is a 'data.frame' object with numerous variables of types "int" (integer), "num" (double), and "chr" (string). We see that the wind.dir column has at least one missing value (NA).
+
+Some of the variables appear to all be very similar to one another (e.g. USAFID, WBAN, year, ceiling.ht, vis.dist), but we cannot generalize this conclusion to the whole dataset without making a table or visualization of each variable.
+
+# 4. Take a closer look at the key variables (year, day, hour, temp, elev, wind.sp)
+
+```{r}
+summary(met$year)
+```
+
+This shows that the entire dataset was collected in the year 2019.
+
+```{r}
+summary(met$hour)
+```
+
+```{r}
+table(met$hour)
+```
+
+This shows that (as one would expect) the "hour" variable keeps track of the hour of the day (from 0:00 to 23:00) at which the observation is recorded. The most common times to record observations are from 4:00 (4 AM) to 12:00 (12 PM), and less observations are recorded late at night (7 PM to 3 AM).
+
+```{r}
+summary(met$temp)
+```
+
+According to the Mandatory Data Section of the data dictionary, we see that temperatures are reported in degrees Celsius. The minimum temperature of -40 degrees Celsius is too cold to be a reasonable measurement.
+
+```{r}
+summary(met$elev)
+```
+
+We see that the maximum elevation is 9999, which is very unreasonable; reading the data document confirms that 9999 is used to indicate a missing value.
+
+```{r}
+summary(met$wind.sp)
+```
+
+Here, we find that the maximum wind speed is much higher than the rest, which is suspicious.
+
+# 5. Check the data against an external data source
+
+To fix these issues, we first remove values of -40 and NA from the "temp" variable:
+
+```{r}
+met <- met[!is.na(met$temp) & met$temp != -40, ]
+```
+
+```{r}
+summary(met$temp)
+```
+
+The coldest temperature is now -17.20 degrees Celsius, which is still suspicious. We see from examining all of the records with this tempreature value that they were recorded in month 8 (August).
+
+```{r}
+met[!is.na(met$temp) & met$temp < 0, ]
+```
+
+According to a National Weather Service page, the lowest minimum temperature for Midland, Texas in August is 52 degrees Fahrenheit, or 11.1 degrees Celsius.
+
+**Source:** “August Daily Temperature Records And Averages.” National Weather Service (Weather.gov), Weather Forecast Office Midland/Odessa, n.d., https://www.weather.gov/maf/cli_maf_temp_august. Accessed 30 Jan. 2026.
+
+Therefore, this value seems too unreasonable for temperatures in the US in August, so we remove all temperature values of -17 or less and check again:
+
+```{r}
+met <- met[!is.na(met$temp) & met$temp > -17, ]
+```
+
+```{r}
+summary(met$temp)
+```
+```{r}
+met[!is.na(met$temp) & met$temp == 56, ]
+```
+
+The minimum temperature is now much more reasonable, although the maximum should still be scrutinized. According to the World Meterological Organization, the highest temperature ever recorded on Earth was 56.7 degrees Celsius; however, this was recorded in Death Valley, California, which is in the US. Therefore, we leave the rest of the data as is.
+
+**Source:** “Records of Weather and Climate Extremes Table.” World Meteorological Organization, 31 July 2025, https://wmo.int/files/records-of-weather-and-climate-extremes-table
+. Accessed 30 Jan. 2026.
+
+Now, we replace values of 9999 in the "elev" variable with NA:
+
+```{r}
+met$elev[met$elev == 9999] <- NA
+```
+
+```{r}
+summary(met$elev)
+```
+
+We see from the summary of "elev" that the highest elevation (of 4,113 m) is still very large compared to the mean and median elevations.
+
+```{r}
+hist(met$elev)
+```
+
+According to the histogram, all of the elevations in the data appear to make sense; a few negative elevations below sea level were recorded, but most of the observations were very close to sea level, which is to be expected for populated sites such as airports. The highest elevation (4,113 m) is plausible for stations at high altitudes such as mountainous regions. According to the U.S. Geological Survey, the highest altitude in the US is Denali in Alaska, which is 20,320 feet (or 6,193.54 m) above sea level, further corroborating the validity of the data.
+
+**Source:** “Highest and Lowest Elevations.” U.S. Geological Survey, U.S. Geological Survey, n.d., https://www.usgs.gov/educational-resources/highest-and-lowest-elevations
+. Accessed 30 Jan. 2026.
+
+# 6. Calculate summary statistics
+
+We pick the weather station with maximum elevation:
+
+```{r}
+met$station_id <- paste(met$USAFID, met$WBAN, sep = "-")
+```
+
+```{r}
+max_elev <- max(met$elev, na.rm = TRUE)
+top_station <- met$station_id[which(met$elev == max_elev)[1]]
+```
+
+Within that station, we examine the correlation between temperature and wind speed:
+
+```{r}
+elev <- met[met$station_id == top_station, ]
+cor(elev$temp, elev$wind.sp, use = "complete.obs")
+```
+
+We find that this correlation is only slightly negative (i.e. wind.sp decreases only slightly as temperature decreases, but they are not closely correlated).
+
+Now, we look at the correlations between temp, wind.sp, hour, and day:
+
+```{r}
+c(
+  temp_wind = cor(elev$temp, elev$wind.sp, use = "complete.obs"),
+  temp_hour = cor(elev$temp, elev$hour,   use = "complete.obs"),
+  wind_hour = cor(elev$wind.sp, elev$hour, use = "complete.obs"),
+  wind_day  = cor(elev$wind.sp, elev$day,  use = "complete.obs")
+)
+```
+
+We find that the highest correlation is between temperature and hour, followed by wind speed and day. Temperature and wind speed (as well as wind speed and hour) do not appear to be highly correlated with each other.
+
+# 7. Exploratory graphs
+
+```{r}
+hist(met$elev, main = "Histogram of Elevations", xlab = "Elevation (m)")
+```
+
+```{r}
+hist(met$temp, main = "Histogram of Temperatures", xlab = "Temperature (degrees Celsius)")
+```
+
+```{r}
+hist(met$wind.sp, main = "Histogram of Wind Speeds", xlab = "Wind Speed (m/s)")
+```
+
+From the histograms, we find that most elevations are below 1,000 m (as validated previously), the temperatures are normally distributed around 25 degrees Celsius (which is roughly room temperature), and the wind speeds are mostly less than 5 meters per second. Thus, all of the data now appears reasonable.
+
+We also look at the time series of temperature vs. wind speed:
+
+
+```{r}
+library(dplyr)
+library(leaflet)
+leaflet(elev) %>%
+  addProviderTiles('OpenStreetMap') %>% 
+  addCircles(lat=~lat,lng=~lon, opacity=1, fillOpacity=1, radius=100)
+```
+
+```{r}
+library(lubridate)
+elev$date <- with(elev, ymd_h(paste(year, month, day, hour, sep= ' ')))
+summary(elev$date)
+elev <- elev[order(elev$date), ]
+head(elev)
+```
+
+```{r}
+plot(elev$date, elev$temp, main = "Temperature Time-Series Plot for Highest-Elevation Station", xlab = "Date", ylab = "Temperature (degrees Celsius)")
+```
+From this time-series plot, we find that the temperature tends to oscillate from day to day and does not generally increase or decrease, which is to be expected. However, the coldest points in the series are around August 12, 18, and 28, which are especially low temperatures of less than 4 degrees Celsius.
+
+
+```{r}
+plot(elev$date, elev$wind.sp, main = "Wind Speed Time-Series Plot for Highest-Elevation Station", xlab = "Date", ylab = "Wind Speed (m/s)")
+```
+
+For this time-series plot, we find that the general trend of wind speed increased gradually from August 1st to 19th, but dropped sharped on August 19th before climbing to a high of over 20 m/s on August 26; the wind speed then decreased until September.
+
+# 8. Ask questions
+Here are some additional specific exploratory questions I had about this data:
+
+Which hours in the day have the most recorded observations?
+```{r}
+barplot(table(met$hour), main = "Counts by hour")
+barplot(table(met$day),  main = "Counts by day of month")
+```
+These bar graphs show that the measurements per hour in a day and per day in a month are fairly evenly distributed, although there seems to be a small drop in observations on the 29th day of the month on average.
+
+How does the average temperature vary per the hour at which it was recorded?
+
+```{r}
+plot(tapply(met$temp, met$hour, mean, na.rm = TRUE), type = "l", xlab = "Hour", ylab = "Mean Temperature")
+```
+We find that the average temperature is lowest (20 degrees Celsius) at hour 12, which corresponds to noon in UTC. This appears to not make sense, but the time zones in the US are significantly shifted from UTC; what is most important is the general oscillation of temperature for each hour in the day, which is expected.
+
+What about the average wind speed per hour recorded?
+```{r}
+plot(tapply(met$wind.sp, met$hour, mean, na.rm = TRUE), type = "l", xlab = "Hour", ylab = "Mean Wind Speed")
+```
+
+This plot shows that the wind speed oscillates in the same way as temperature, which is also expected.
+
+```{r}
+plot(met$lon, met$lat, pch = 16, cex = 0.2)
+```
+
+
+Are higher-elevation stations colder on average? To measure this without plotting all 230,000+ observations, we can sort the observations into bins based on their elevation:
+
+```{r}
+elevations <- cut(met$elev, breaks = 10)
+m <- tapply(met$temp, elevations , mean, na.rm = TRUE)
+barplot(m, las = 2, xlab = "Elevation bin", ylab = "Mean temperature (°C)")
+```
+
+This bar plot shows us that higher elevations indeed tend to have colder temperatures in their observations.
+
+```{r}
+names(met)
+```
+
+Finally, what are the correlations between variables? We can use a correlation heatmap to visualize this:
+
+```{r}
+num <- met[sapply(met, is.numeric)]
+
+# Keep columns with a nonzero standard deviation
+keep <- sapply(num, function(x) sd(x, na.rm = TRUE) > 0)
+num2 <- num[, keep]
+
+C <- cor(num2, use = "complete.obs")
+heatmap(C)
+```
+There appears to be a strong correlation between relative humidity (rh) and dew point (the temperature air must cool to for water vapor to condense), which makes sense scientifically. Also, latitude and longitude can sometimes be slightly correlated due to stations being located in certain places across the U.S. Interestingly, we also see a correlation between atmospheric pressure and relative humidity, which may be because pressure affects the density of water vapor, such that a lower pressure brings higher humidity and more rain.
