@@ -50,3 +50,5 @@ rsconnect/
 
 # Datasets
 covid_processed.csv
+daily_88101_2005.csv
+daily_88101_2025.csv

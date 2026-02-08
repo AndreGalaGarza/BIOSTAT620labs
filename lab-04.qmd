@@ -7,7 +7,7 @@ editor: visual
 
 **Disclaimer:** Generative AI was used to assist with templating and writing code in this assignment; however, this code was checked manually and edited by hand to ensure accuracy.
 
-**Source:** OpenAI. (2026). *ChatGPT (GPT-5.2 Thinking)* [Large language model]. <https://chatgpt.com/>.
+**Source:** OpenAI. (2026). *ChatGPT (GPT-5.2 Thinking)* \[Large language model\]. <https://chatgpt.com/>.
 
 # 1. Read in the data
 
@@ -25,7 +25,6 @@ if (!file.exists("covid_processed.csv"))
 covid <- read.csv("covid_processed.csv")
 ```
 
-
 ```{r}
 head(covid)
 ```
@@ -35,6 +34,7 @@ dim(covid)
 ```
 
 # 2. Prepare the data
+
 ```{r}
 normalize_pop <- function(cases, pop) {
   cases / pop * 100000
@@ -53,8 +53,8 @@ covid$date <- ymd(covid$date)
 head(covid$date)
 ```
 
-
 **Note:** In the summary table of mean values by state below, the first population value was used for each state (i.e. the population for that state recorded in 2020).
+
 ```{r}
 library(dplyr)
 
@@ -76,11 +76,13 @@ head(covid_means)
 covid_means$pop_binary <- ifelse(covid_means$pop >= 1e7, TRUE, FALSE)
 head(covid_means)
 ```
+
 ```{r}
 covid$region_name <- factor(covid$region_name)
 covid_means$region_name <- factor(covid_means$region_name)
 covid_means$region_name
 ```
+
 # 3. Use geom_violin to examine the case rates and death rates by region
 
 ```{r}
@@ -91,6 +93,7 @@ covid_means %>%
     facet_wrap(~ region_name) +
     ggtitle("Case Rates by Region of U.S.")
 ```
+
 Based on this plot, we can see that the regions of the U.S. with the highest case rates are the Central Plains, Midwest, Mountain States, South Central, and Southeast regions, while the New York Islands tend to have the lowest case rates. The Pacific Northwest is the most broadly distributed region in terms of case rates, with rates spread roughly evenly from 100 to 200 cases.
 
 ```{r}
@@ -105,6 +108,7 @@ covid_means %>%
 Based on this plot, we can see that the South Central and Southeast regions have the highest death rates, with an average of roughly 3 deaths, while Pacific Northwest has the lowest death rate, averaging roughly 1 death. The Central, Mid-Atlantic, Midwest, and Mountain States regions average roughly 2 to 3 deaths, while the New England, New York Islands, and Pacific regions are the most broadly distributed, with rates anywhere from 3 deaths to less than 1 death on average.
 
 # 4. Examine the association between time and case rates by region
+
 ```{r}
 # Filter out first 2 weeks
 start_date <- min(covid$date, na.rm = TRUE)
@@ -149,6 +153,7 @@ p_lm
 ```{r}
 p_default
 ```
+
 From comparing these plots, we can see that COVID rates spiked in most regions (the rates increased to above 400 cases per week) at the start of 2021 and 2022, but tended to remain low (less than 200 cases per week) throughout most of 2020 and 2021. Therefore, the standard smoothed model does a much better job at capturing the overall trend in COVID rates compared to the linear model using "method = lm".
 
 ```{r}
@@ -211,6 +216,7 @@ ggplot(covid_means_plot, aes(x = pop_cat, fill = region_name)) +
   ) +
   theme_minimal()
 ```
+
 In this bar graph, we see that the regions with the most states under a population of 10 million are from the Mountain States and New England regions, with 6 states each, and no states with populations above 10 million. The regions that only have one state with a population above 10 million are the Mid-Atlantic, New York Islands, Pacific, and South Central regions. Meanwhile, both the Midwest and Southeast regions have 2 states with a population above 10 million, while the Southeast also has 5 states with a population below 10 million.
 
 # 6. Use stat_summary to examine mean vaccination rate and death rate by region
@@ -238,8 +244,8 @@ ggplot(covid_means, aes(x = region_name, y = series, color = region_name)) +
   theme(legend.position = "none") +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
 ```
-From this plot, we see that vaccination rates are the most varies in the Mid-Atlantic, Pacific, and Pacific Northwest regions, with the standard deviation range being the highest. We also see that New England has the most consistently high vaccination rate, with a mean of 24,000 vaccinations per week and a small standard deviation. The overall lowest vaccination rates are from the Southeast region, with a mean of roighly 17,000 and a standard deviation dropping all the way to less than 15,000 vaccinations per week.
 
+From this plot, we see that vaccination rates are the most varies in the Mid-Atlantic, Pacific, and Pacific Northwest regions, with the standard deviation range being the highest. We also see that New England has the most consistently high vaccination rate, with a mean of 24,000 vaccinations per week and a small standard deviation. The overall lowest vaccination rates are from the Southeast region, with a mean of roighly 17,000 and a standard deviation dropping all the way to less than 15,000 vaccinations per week.
 
 ```{r}
 # Death rate by region
@@ -264,6 +270,7 @@ ggplot(covid_means, aes(x = region_name, y = deaths, color = region_name)) +
 From this plot, we see that the mean death rate is fairly consistent across states, with most having a rate of 1.5 to 2.5 deaths per week. The New England, New York Islands, and Pacific regions have a standard deviation that varies wildly, from below 0 to above 3.5 deaths per week. The lowest mean death rate belongs to the Pacific Northwest with roughly 1.5 deaths per week, while the highest belongs to the South Central region with nearly 3 deaths per week and a small standard deviation.
 
 # 7. Make a map showing the spatial trend in COVID deaths in the US
+
 ```{r}
 library(dplyr)
 library(ggplot2)
@@ -325,6 +332,7 @@ ggplot(us_states_covid, aes(x = long, y = lat, group = group, fill = deaths)) +
     panel.grid = element_blank()
   )
 ```
+
 From this plot, we see a clear trend: The highest death rates (denoted by the darkest blue colors and many of the stars indicating the top 10 death rates by state) are clustered around the South and Southwest regions of the US, while the lower death rates (light blues) tend to appear more in the higher regions of the US. For example, the Upper Midwest, parts of the Mountain West, and much of New England / the far North have lighter shading than the South.
 
 # 8. Use gganimate to plot monthly 2021 vaccination rates by region
