@@ -1,0 +1,295 @@
+---
+title: "lab-06"
+author: "Andre Gala-Garza"
+date: "2/19/2026"
+format: html
+editor: visual
+embed-resources: true
+---
+
+**Disclaimer:** Generative AI was used to assist with templating and writing code in this assignment; however, this code was checked manually and edited by hand to ensure accuracy.
+
+**Source:** OpenAI. (2026). *ChatGPT (GPT-5.2 Thinking)* \[Large language model\]. <https://chatgpt.com/>.
+
+# 0. Load packages and data
+
+```{r}
+library("dplyr")
+library("ggplot2")
+library("tidytext")
+library("tidyr")
+library("forcats")
+library("stringr")
+```
+
+```{r}
+url <- 'https://raw.githubusercontent.com/dmcable/BIOSTAT620W26/main/data/mtsamples/mtsamples.csv'
+if (!file.exists("mtsamples.csv"))
+  download.file(
+    url = url,
+    destfile = "mtsamples.csv",
+    method   = "libcurl",
+    timeout  = 60
+    )
+mtsamples <- read.csv('mtsamples.csv')
+```
+
+```{r}
+dim(mtsamples)
+```
+
+```{r}
+head(mtsamples)
+```
+
+```{r}
+colnames(mtsamples)
+```
+
+```{r}
+str(mtsamples)
+```
+
+# 1. Identify specialties
+
+```{r}
+specialties <- mtsamples %>%
+  count(medical_specialty) %>%
+  arrange(desc(n))
+specialties
+```
+
+From examining the table of medical specialties and their counts, we find that there are 40 specialties in total. The most common specialty by far is "Surgery", with over 1,100 records. However, there are also more specific specialties that overlap with surgery, such as "Neurosurgery" with 94 records, and "Cosmetic / Plastic Surgery" with only 27 records. 
+
+```{r}
+hist(specialties$n)
+```
+
+From the distribution of the specialty frequencies, we find that they are not evenly distributed; instead, the distribution is heavily right-skewed, with some categories having far more records than others.
+
+# 2. Tokenize and visualize
+
+```{r}
+mtsamples_tokens <- mtsamples %>%
+  unnest_tokens(token, transcription)
+head(mtsamples_tokens)
+```
+
+```{r}
+head(mtsamples_tokens$token)
+```
+
+```{r}
+mtsamples_token_counts <- mtsamples_tokens %>%
+  count(token) %>%
+  arrange(desc(n))
+
+head(mtsamples_token_counts)
+```
+
+```{r}
+ggplot(data = head(mtsamples_token_counts, n = 20), aes(x = fct_reorder(token, -n), y = n)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Bar Chart of MTSamples Token Counts",
+       y = "Count",
+       x = "Token")
+```
+
+We see from the bar chart that the most common word in the transcriptions column is "the", followed by "and", "was", "of", etc. This makes perfect sense because "the" is the most common word in the English language overall, as it is necessary for general communication. Most of these words are stop words that do not provide significant meaning; the exception is "patient", which is quite common at a count of roughly 20,000, and is expected in a collection of medical descriptions.
+
+# 3. Remove stop words and visualize
+
+```{r}
+mtsamples_tokens <- mtsamples %>%
+  unnest_tokens(token, transcription) %>%
+  filter(!str_detect(token, "^\\d{1,3}(,\\d{3})*(\\.\\d+)?$")) %>%
+  anti_join(stop_words, by = c("token" = "word"))
+head(mtsamples_tokens)
+```
+
+```{r}
+head(mtsamples_tokens$token)
+```
+
+```{r}
+mtsamples_token_counts <- mtsamples_tokens %>%
+  count(token) %>%
+  arrange(desc(n))
+
+head(mtsamples_token_counts)
+```
+
+```{r}
+ggplot(data = head(mtsamples_token_counts, n = 20), aes(x = fct_reorder(token, -n), y = n)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Bar Chart of MTSamples Token Counts",
+       y = "Count",
+       x = "Token") +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5))
+```
+From this bar graph, we get a much more valuable analysis of the most common tokens: We find that "patient" is the most common word that is not a stopword or a number. Some other common tokens are "history", "procedure", "pain", and "time", which all refer to common measurements in medical cases. Other common tokens refer to specific biological terms like "blood", "skin", and "artery".
+
+# 4. Tokenize into bigrams and trigrams
+
+Note that this question asks to repeat question 2 (not 3), so we do not remove stopwords or numbers.
+
+We first tokenize into bigrams:
+
+```{r}
+mtsamples_tokens <- mtsamples %>%
+  unnest_ngrams(token, transcription, n = 2)
+head(mtsamples_tokens)
+```
+
+```{r}
+head(mtsamples_tokens$token)
+```
+```{r}
+mtsamples_token_counts <- mtsamples_tokens %>%
+  count(token) %>%
+  arrange(desc(n))
+```
+
+```{r}
+head(mtsamples_token_counts)
+```
+
+```{r}
+ggplot(data = head(mtsamples_token_counts, n = 20), aes(x = fct_reorder(token, -n), y = n)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Bar Chart of MTSamples Token Counts",
+       y = "Count",
+       x = "Token") +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5))
+```
+We see that the most common bigram is "the patient" with over 20,000 appearances, which makes perfect sense given that this is the focus of a medical report. Other bigrams also include the patient, such as "patient was" and "patient is". However, the rest of the bigrams (besides "history of") do not provide significant information, much like the stopwords from Question 2. 
+
+We now tokenize into trigrams:
+
+```{r}
+mtsamples_tokens <- mtsamples %>%
+  unnest_ngrams(token, transcription, n = 3)
+head(mtsamples_tokens)
+```
+
+```{r}
+head(mtsamples_tokens$token)
+```
+
+```{r}
+mtsamples_token_counts <- mtsamples_tokens %>%
+  count(token) %>%
+  arrange(desc(n))
+```
+
+```{r}
+head(mtsamples_token_counts)
+```
+
+```{r}
+ggplot(data = head(mtsamples_token_counts, n = 20), aes(x = fct_reorder(token, -n), y = n)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Bar Chart of MTSamples Token Counts",
+       y = "Count",
+       x = "Token") +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5))
+```
+
+The most common trigram was "the patient was", followed by "the patient is", which once again makes perfect sense in this context. However, we also see more specific tokens such as "the operating room", "prepped and draped", and "tolerated the procedure", which speaks to the specificity of language used in medical analysis. 
+
+# 5. Count words that appear before and after "patient"
+
+```{r}
+patient_tokens <- mtsamples %>%
+  unnest_ngrams(ngram, transcription, n = 3) %>%
+  separate(ngram, into = c("word1", "word2", "word3"), sep = " ") %>%
+  filter(word2 == "patient")
+```
+
+```{r}
+head(patient_tokens)
+```
+
+```{r}
+patient_token_counts <- patient_tokens %>%
+  count(word1, sort = TRUE)
+head(patient_token_counts)
+```
+
+```{r}
+ggplot(data = head(patient_token_counts, n = 20), aes(x = fct_reorder(word1, -n), y = n)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Bar Chart of MTSamples Tokens That Appear Before \"Patient\"",
+       y = "Count",
+       x = "Token") +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5))
+```
+From the bar chart, we find that the most common word that appears before "patient" is overwhelmingly "the", followed by "this", with the other tokens being extremely obscure by comparison. Again, this makes sense, since the word "patient" is a noun and is typically followed by either "the" or "this".
+
+```{r}
+patient_token_counts <- patient_tokens %>%
+  count(word3, sort = TRUE)
+head(patient_token_counts)
+```
+
+```{r}
+ggplot(data = head(patient_token_counts, n = 20), aes(x = fct_reorder(word3, -n), y = n)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Bar Chart of MTSamples Tokens That Appear After \"Patient\"",
+       y = "Count",
+       x = "Token") +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5))
+```
+We find that the distribution of words that appear after "patient" is much more evenly distributed; however, the most common word after "patient" is "was", followed by "is", "has", and "tolerated". It makes sense that these words are either stopwords or verbs in the past tense, since the typical format of a medical report is to describe what happened to a patient in past tense.
+
+# 6. Find most frequent words in each speciality
+
+```{r}
+mtsamples_tokens <- mtsamples %>%
+  unnest_tokens(token, transcription) %>%
+  filter(!str_detect(token, "^\\d{1,3}(,\\d{3})*(\\.\\d+)?$")) %>%
+  anti_join(stop_words, by = c("token" = "word"))
+```
+
+```{r}
+mtsamples_token_counts <- mtsamples_tokens %>%
+  count(medical_specialty, token, sort = TRUE) %>%
+  group_by(medical_specialty) %>%
+  slice_max(n, n = 5, with_ties = FALSE) %>% 
+  ungroup()
+
+mtsamples_token_counts
+```
+
+# 7. Identify interesting 5-grams
+
+```{r}
+mtsamples_tokens <- mtsamples %>%
+  unnest_ngrams(token, transcription, n = 5)
+head(mtsamples_tokens)
+```
+
+```{r}
+head(mtsamples_tokens$token)
+```
+
+```{r}
+mtsamples_token_counts <- mtsamples_tokens %>%
+  count(token) %>%
+  arrange(desc(n))
+```
+
+```{r}
+head(mtsamples_token_counts)
+```
+
+```{r}
+ggplot(data = head(mtsamples_token_counts, n = 20), aes(x = fct_reorder(token, -n), y = n)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Bar Chart of MTSamples Token Counts",
+       y = "Count",
+       x = "Token") +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5))
+```
+
+Interestingly, nearly all of the most common 5-grams (groups of 5 words) in the transcription data describe either the patient tolerating a procedure or the patient being draped in sterile robes and taken to the operating room, which again highlights the necessity of consistent language between medical reports.
