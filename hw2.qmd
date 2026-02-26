@@ -1,7 +1,7 @@
 ---
 title: "hw2"
 author: "Andre Gala-Garza"
-date: "2/14/2026"
+date: "2/26/2026"
 format: html
 editor: visual
 embed-resources: true
@@ -51,7 +51,6 @@ chs <- chs_individual %>%
 
 # Row count should match individual dataset if regional townname is unique
 nrow(chs_individual)
-nrow(chs)
 
 # Check for duplicate rows after merge (should be the same as nrow(chs))
 nrow(chs)
@@ -162,10 +161,15 @@ obesity_check
 ```
 
 ## (iii) Create smoke/gas exposure categorical variable
+
+```{r}
+unique(chs_imp$gasstove)
+unique(chs_imp$smoke)
+```
+Note that for some of the records in the dataset, the values of "gasstove" and "smoke" were not binary (i.e. either 0 or 1). For these cases, the "gasstove" and "smoke" categorical variables were rounded to either 0 or 1 depending on whether the original value was greater than or equal to 0.5.
+
 ```{r}
 library(dplyr)
-
-names(chs_imp)
 
 shs_var <- "smoke"
 gas_var <- "gasstove"
@@ -173,15 +177,25 @@ gas_var <- "gasstove"
 chs_imp <- chs_imp %>%
   mutate(
     shs_bin = case_when(
-      is.na(.data[[shs_var]]) ~ NA,
+      is.na(.data[[shs_var]]) ~ NA_real_,
       .data[[shs_var]] %in% c(1, "1", "Y", "Yes", "YES", TRUE) ~ 1,
       .data[[shs_var]] %in% c(0, "0", "N", "No",  "NO",  FALSE) ~ 0,
+      suppressWarnings(!is.na(as.numeric(as.character(.data[[shs_var]])))) ~
+        if_else(
+          as.numeric(as.character(.data[[shs_var]])) >= 0.5,
+          1, 0
+        ),
       TRUE ~ NA_real_
     ),
     gas_bin = case_when(
-      is.na(.data[[gas_var]]) ~ NA,
+      is.na(.data[[gas_var]]) ~ NA_real_,
       .data[[gas_var]] %in% c(1, "1", "Y", "Yes", "YES", TRUE) ~ 1,
       .data[[gas_var]] %in% c(0, "0", "N", "No",  "NO",  FALSE) ~ 0,
+      suppressWarnings(!is.na(as.numeric(as.character(.data[[gas_var]])))) ~
+        if_else(
+          as.numeric(as.character(.data[[gas_var]])) >= 0.5,
+          1, 0
+        ),
       TRUE ~ NA_real_
     ),
     smoke_gas_exposure = case_when(
@@ -201,17 +215,10 @@ chs_imp <- chs_imp %>%
 
 head(chs_imp %>% select(all_of(shs_var), all_of(gas_var), smoke_gas_exposure))
 
-# Quick check: counts in the four categories
 chs_imp %>%
   count(smoke_gas_exposure, name = "n")
 ```
 
-```{r}
-unique(chs_imp$gasstove)
-unique(chs_imp$smoke)
-```
-
-Note that for some of the records in the dataset, the values of "gasstove" and "smoke" were not binary (i.e. either 0 or 1). For these cases, the "smoke_gas_exposure" categorical variable was set to NA.
 
 ## (iv) Make four summary tables
 ```{r}
@@ -264,9 +271,13 @@ In the smoke/gas exposure table, we see that the means are very similar across g
 # 2. Exploratory Data Analysis (EDA)
 ## Steps 1-4
 From the previous problem, we have already completed the first four steps on the EDA checklist:
+
 1. Read in the data
+
 2. Check the size of the data
+
 3. Examine the variables and their types
+
 4. Look at the top and bottom of the data
 
 ## Step 5: Visualize distributions of key variables
@@ -284,7 +295,7 @@ ggplot(chs, aes(x = pm25_mass)) + geom_histogram() + labs(title = "Distribution 
 chs %>% count(smoke, useNA = "ifany")
 chs %>% count(gasstove, useNA = "ifany")
 ```
-From these histograms, we see that FEV follows a unimodal distribution centered around ~1900-2200 ml. It is roughly centered around the mean without being clearly left-tailed or right-tailed. The BMI distribution is clearly right-skewed, with most values clustered around ~14-20 followed by a long tail. Finally, in the distribution of PM2.5, it is not smooth, but instead contains one "spike" for each town, since PM2.5 is measured at the town/community level.
+From these histograms, we see that FEV follows a unimodal distribution centered around ~1900-2200 ml. It is roughly centered around the mean without being clearly left-tailed or right-tailed. The BMI distribution is clearly right-skewed, with most values clustered around ~14-20 followed by a long tail. Finally, the distribution of PM2.5 is not smooth, but instead contains one "spike" of either 100 or 200 records per community, since PM2.5 is measured at the community-level for 12 communities across southern California. In other words, the community-level analysis is the reason why the same measurements are being repeated either 100 or 200 times per community.
 
 ## Step 6: Check your expectations
 ```{r}
@@ -331,6 +342,40 @@ In the easy (unadjusted) model, BMI is strongly and positively associated with l
 
 After adjustment, the model’s explanatory power increases dramatically (R^2 ≈ 0.49), indicating that height and sex account for much more variation in FEV than BMI does; nonetheless, BMI still shows an independent positive association with FEV in this dataset, while age contributes little here (p ≈ 0.96).
 
+
+```{r}
+df_plot <- df1 %>%
+  mutate(
+    bmi_resid = resid(lm(bmi ~ male + height + agepft, data = df1)),
+    fev_resid = resid(lm(fev ~ male + height + agepft, data = df1))
+  )
+
+# Put both relationships in one panel by standardizing axes:
+# - Crude: (bmi, fev)
+# - Adjusted (AV): (bmi_resid, fev_resid)
+long_plot <- bind_rows(
+  df_plot %>%
+    transmute(x = bmi, y = fev, type = "Crude (FEV vs BMI)"),
+  df_plot %>%
+    transmute(x = bmi_resid, y = fev_resid, type = "Adjusted (added-variable residuals)")
+)
+
+ggplot(long_plot, aes(x = x, y = y, color = type)) +
+  geom_point(alpha = 0.25) +
+  geom_smooth(method = "lm", se = FALSE, linewidth = 1) +
+  facet_wrap(~type, scales = "free") +
+  labs(
+    title = "Crude vs adjusted association between BMI and FEV",
+    x = NULL,
+    y = NULL,
+    color = NULL
+  ) +
+  theme_minimal() +
+  theme(legend.position = "none")
+```
+
+The side-by-side plot above contrasts the raw relationship with the “net” relationship after accounting for key physiology covariates. On the right, the crude scatter shows a steep upward regression line, reflecting that heavier individuals tend to have higher observed FEV in this sample. On the left, the added-variable (residual–residual) plot isolates what BMI explains beyond sex, height, and age: the fitted line remains upward but is noticeably flatter amid substantial scatter around zero, indicating that much of the apparent BMI–FEV trend is shared with overall body size while a smaller, still positive BMI signal persists once those factors are removed.
+
 ### Q2: Association between smoke/gas exposure and FEV
 ```{r}
 df2 <- chs_imp %>% 
@@ -376,12 +421,70 @@ adj_only <- as.data.frame(adj_tab) %>%
 comparison <- left_join(raw_only, adj_only, by = "smoke_gas_exposure")
 comparison
 ```
-
-In unadjusted comparisons, mean FEV was ~30–35 ml lower in the gas-stove-only and both-exposure groups compared with neither exposure
+In unadjusted comparisons, mean FEV was ~30–35 ml lower in the gas-stove-only and both-exposure groups compared with neither exposure.
 
 After adjusting for sex, height, and age, the difference for gas-stove-only essentially vanished (−29 ml unadjusted vs −1.5 ml adjusted), and the difference for both exposures was smaller (about −27 ml). None of the adjusted differences were statistically significant.
 
 Height and sex were strongly associated with FEV, suggesting the crude differences largely reflected differences in body size/sex composition across exposure groups rather than a clear exposure effect.
+
+```{r}
+df2_sum <- df2 %>%
+  group_by(smoke_gas_exposure) %>%
+  summarise(
+    raw_mean = mean(.data[["fev"]], na.rm = TRUE),
+    raw_sd   = sd(.data[["fev"]], na.rm = TRUE),
+    n = n(),
+    .groups = "drop"
+  ) %>%
+  mutate(raw_se = raw_sd / sqrt(n),
+         raw_ci_lo = raw_mean - 1.96 * raw_se,
+         raw_ci_hi = raw_mean + 1.96 * raw_se)
+
+adj_df <- as.data.frame(adj_tab) %>%
+  mutate(
+    adj_ci_lo = emmean - qt(0.975, df) * SE,
+    adj_ci_hi = emmean + qt(0.975, df) * SE
+  ) %>%
+  transmute(
+    smoke_gas_exposure,
+    adj_mean = emmean,
+    adj_ci_lo,
+    adj_ci_hi
+  )
+
+means_both <- df2_sum %>%
+  select(smoke_gas_exposure, raw_mean, raw_ci_lo, raw_ci_hi) %>%
+  left_join(adj_df, by = "smoke_gas_exposure") %>%
+  tidyr::pivot_longer(
+    cols = c(raw_mean, adj_mean),
+    names_to = "type",
+    values_to = "mean"
+  ) %>%
+  mutate(
+    type = recode(type, raw_mean = "Raw", adj_mean = "Adjusted"),
+    ci_lo = if_else(type == "Raw", raw_ci_lo, adj_ci_lo),
+    ci_hi = if_else(type == "Raw", raw_ci_hi, adj_ci_hi)
+  )
+
+ggplot(means_both, aes(x = smoke_gas_exposure, y = mean, group = type)) +
+  geom_point(aes(shape = type), position = position_dodge(width = 0.35), size = 2) +
+  geom_errorbar(
+    aes(ymin = ci_lo, ymax = ci_hi, linetype = type),
+    position = position_dodge(width = 0.35),
+    width = 0.12
+  ) +
+  labs(
+    title = "Raw vs adjusted mean FEV by smoke/gas exposure",
+    subtitle = "Adjusted means from m2_adj via emmeans; CIs shown",
+    x = "Exposure category",
+    y = "Mean FEV",
+    shape = NULL,
+    linetype = NULL
+  ) +
+  theme_minimal()
+```
+
+The grouped scatterplot above compares simple (raw) mean FEV by smoke/gas exposure group to regression-adjusted mean FEV after controlling for sex, height, and age, with 95% confidence intervals. Overall, the raw means are fairly similar across categories and the adjusted means shift only slightly (most noticeably for the secondhand-smoke-only group), but in both cases the confidence intervals overlap substantially. This suggests differences in average FEV across exposure groups are modest relative to within-group variability, and covariate adjustment does not produce a dramatic separation between categories.
 
 ### Q3: Association between PM2.5 exposure and FEV
 ```{r}
@@ -404,6 +507,26 @@ summary(m3_adj)
 In the easy (unadjusted) model, PM2.5 mass is negatively associated with lung function: each 1-unit increase in pm25_mass is associated with about 3.19 ml lower FEV (p = 0.013). However, this model explains essentially none of the variability in FEV (R^2 ≈ 0.006), meaning PM2.5 alone is a very weak predictor at the individual level.
 
 In the challenged (adjusted) model controlling for sex, height, and age, the PM2.5 association becomes smaller in magnitude (about −1.65 ml per unit) and is only marginal (p = 0.084), suggesting the crude association was at least partly confounded by differences in body size/sex/age across towns. Meanwhile, the adjustment variables behave as expected and dominate prediction: height (~+32 ml per unit) and male sex (~+125 ml) are strongly associated with higher FEV, and the model’s R^2 jumps to ~0.47 largely due to these physiological predictors rather than PM2.
+
+```{r}
+df3_plot <- df3 %>%
+  mutate(
+    pm25_resid = resid(lm(pm25_mass ~ male + height + agepft, data = df3)),
+    fev_resid  = resid(lm(fev ~ male + height + agepft, data = df3))
+  )
+
+ggplot(df3_plot, aes(x = pm25_resid, y = fev_resid)) +
+  geom_point(alpha = 0.3) +
+  geom_smooth(method = "lm", se = FALSE) +
+  labs(
+    title = "Adjusted association (added-variable plot): PM2.5 vs FEV",
+    subtitle = "Residual(FEV | male + height + agepft) vs Residual(PM2.5 | male + height + agepft)",
+    x = "PM2.5 residualized",
+    y = "FEV residualized"
+  ) +
+  theme_minimal()
+```
+This added-variable (partial regression) plot shows the relationship between PM2.5 and FEV after removing the effects of sex, height, and age from both variables: the x-axis is the residualized PM2.5 (variation not explained by male/height/agepft) and the y-axis is the residualized FEV. Just like the plot of the original variables, the fitted line is essentially flat with only a very slight downward tilt, indicating that once those physiological covariates are accounted for, PM2.5 still has little independent linear association with FEV in this dataset. The wide scatter around the line reinforces that the remaining PM2.5 signal is small relative to the residual variability in FEV, consistent with a weak and possibly non-significant adjusted effect.
 
 # 3. Data visualizations
 ## (i) Facet plot showing scatterplots with regression lines of BMI vs FEV by “townname”
