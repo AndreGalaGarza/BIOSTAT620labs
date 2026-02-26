@@ -1,0 +1,153 @@
+---
+title: "lab-07"
+author: "Andre Gala-Garza"
+date: "2/26/2026"
+format: html
+editor: visual
+embed-resources: true
+---
+
+**Disclaimer:** Generative AI was used to assist with templating and writing code in this assignment; however, this code was checked manually and edited by hand to ensure accuracy.
+
+**Source:** OpenAI. (2026). *ChatGPT (GPT-5.2 Thinking)* \[Large language model\]. <https://chatgpt.com/>.
+
+# 1. How many Sars-Cov-2 papers?
+
+```{r}
+# Downloading the website
+website <- xml2::read_html("https://pubmed.ncbi.nlm.nih.gov/?term=sars-cov-2")
+
+# Finding the counts
+counts <- xml2::xml_find_first(website, "//div[@class='results-amount']//span[@class='value']/text()")
+
+# Turning it into text
+counts <- as.character(counts)
+
+# Extracting the data using regex
+totalcount <- stringr::str_extract(counts, "[0-9][0-9,\\.]*")
+
+# Removing any commas/dots so that we can convert to numeric
+totalcount <- gsub("[,\\.]", "", totalcount)
+
+totalcount <- as.numeric(totalcount)
+print(totalcount)
+```
+
+# 2. Get article abstracts and authors
+```{r}
+# read in text, each line is a separate character
+abstracts <- readLines('abstract-sars-cov-2-set.txt', warn = FALSE)
+
+# combine all text into one character
+abstracts <- paste(abstracts, collapse = "\n")
+
+# split the text whenever 3 new lines occur in a row (indicating two blank lines)
+abstracts <- strsplit(abstracts, "\n{3,}")
+
+# replace any remaining "\n" symbols with spaces
+abstracts <- gsub("\n", " ", abstracts)
+
+# replace multiple spaces with single space
+abstracts <- gsub("\\s+", " ", abstracts)
+```
+
+# 3. Distribution of universities
+
+```{r}
+library(stringr)
+
+institution <- str_extract_all(
+  abstracts,
+  "\\b(?:The\\s+)?(?:University of\\s+[A-Za-z][A-Za-z\\-]*(?:\\s+[A-Za-z][A-Za-z\\-]*)*|[A-Z][A-Za-z\\-]*(?:\\s+[A-Z][A-Za-z\\-]*)*\\s+(?:State\\s+)?University|[A-Z][A-Za-z\\-]*(?:\\s+[A-Z][A-Za-z\\-]*)*\\s+Institute of\\s+[A-Za-z][A-Za-z\\-]*(?:\\s+[A-Za-z][A-Za-z\\-]*)*)\\b"
+)
+
+institution <- unlist(institution)
+```
+
+```{r}
+head(table(institution))
+```
+
+```{r}
+library(dplyr)
+library(ggplot2)
+
+tab <- sort(table(institution), decreasing = TRUE)
+
+top10 <- data.frame(
+  institution = names(tab)[1:10],
+  n = as.integer(tab[1:10]),
+  stringsAsFactors = FALSE
+) |>
+  mutate(institution = factor(institution, levels = rev(institution)))
+
+ggplot(top10, aes(x = n, y = institution)) +
+  geom_col() +
+  labs(
+    title = "Top 10 Most Common Institutions in Affiliations",
+    x = "Count",
+    y = NULL
+  )
+```
+From this bar chart, we see that the University of Michigan is the most common university mentioned in the PubMed abstracts in the state of Michigan from 2020 to 2021, which makes perfect sense. This is followed by Michigan State University, the UMich Medical School, and Wayne State University, which also make sense.
+
+Some ways that these results could be improved are to normalize the names before counting so that e.g. "UMich" becomes "University of Michigan", make the regex more specific to university names such as "Institute of..." or "College of...", and deduplication within one abstract so that if a university name appears multiple times in one abstract, it isn't counted more than once.
+
+# 4. Make a tidy dataset
+
+```{r}
+# read in text, each line is a separate character
+abstracts <- readLines('abstract-sars-cov-2-set.txt', warn = FALSE)
+
+# combine all text into one character
+abstracts <- paste(abstracts, collapse = "\n")
+
+# split the text whenever 3 new lines occur in a row (indicating two blank lines)
+abstracts <- strsplit(abstracts, "\n{3,}")[[1]]
+```
+
+```{r}
+library(stringr)
+
+journal <- str_match(abstracts, "(?m)^\\s*\\d+\\.\\s*(.*?)\\s+\\d{4}\\b")[,2]
+```
+
+```{r}
+titles <- sapply(abstracts, function(x){
+  parts <- unlist(strsplit(x, split = "\n\n"))
+  parts <- parts[parts != ""]          # drop empty chunks from extra blank lines
+  parts[2]
+}, USE.NAMES = FALSE)
+```
+
+```{r}
+library(stringr)
+
+authors <- sapply(abstracts, function(x){
+  parts <- unlist(strsplit(x, split = "\n\n"))
+  parts <- parts[parts != ""]
+  a <- parts[3]              # authors are the 3rd non-empty block
+  gsub("\n", " ", a)         # remove any single newline within long author lists
+}, USE.NAMES = FALSE)
+
+authors <- gsub("\\s+", " ", authors)
+```
+
+```{r}
+affiliations <- str_extract(
+  abstracts,
+  "(?s)\\n\\nAuthor information:\\n\\n.*?\\n\\n"
+)
+```
+
+```{r}
+papers <- data.frame(
+  journal = journal,
+  title = titles,
+  authors = stringr::str_trunc(authors, width = 100, side = "right", ellipsis = "..."),
+  affiliations = stringr::str_trunc(affiliations, width = 100, side = "right", ellipsis = "..."),
+  stringsAsFactors = FALSE
+)
+
+knitr::kable(papers[1:5, ])
+```
