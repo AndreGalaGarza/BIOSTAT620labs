@@ -1,0 +1,256 @@
+---
+title: "lab-09"
+author: "Andre Gala-Garza"
+date: "3/19/2026"
+format: html
+editor: visual
+embed-resources: true
+---
+
+**Disclaimer:** Generative AI was used to assist with templating and writing code in this assignment; however, this code was checked manually and edited by hand to ensure accuracy.
+
+**Source:** OpenAI. (2026). *ChatGPT (GPT-5.4 Thinking)* \[Large language model\]. <https://chatgpt.com/>.
+
+```{r}
+# install.packages(c("RSQLite", "DBI"))
+
+library(RSQLite)
+library(DBI)
+
+# Initialize a temporary in memory database
+con <- dbConnect(SQLite(), ":memory:")
+
+# Download tables
+doctor <- read.csv("https://raw.githubusercontent.com/dmcable/BIOSTAT620W26/main/data/hospital/doctor.csv")
+visit <- read.csv("https://raw.githubusercontent.com/dmcable/BIOSTAT620W26/main/data/hospital/visit.csv")
+patient <- read.csv("https://raw.githubusercontent.com/dmcable/BIOSTAT620W26/main/data/hospital/patient.csv")
+payment <- read.csv("https://raw.githubusercontent.com/dmcable/BIOSTAT620W26/main/data/hospital/payment.csv")
+
+# Copy data.frames to database
+dbWriteTable(con, "doctor", doctor)
+dbWriteTable(con, "visit", visit)
+dbWriteTable(con, "patient", patient)
+dbWriteTable(con, "payment", payment)
+```
+
+```{r}
+dbListTables(con)
+```
+**Note:** For each query, the LIMIT command was used to prevent the entire output from displaying in the knitted HTML file.
+
+# Exercise 1
+
+```{r}
+dbGetQuery(con,
+  "SELECT doctor_id, first_name, last_name
+  FROM doctor
+  ORDER by last_name, first_name
+  LIMIT 10"
+)
+```
+
+# Exercise 2
+
+```{r}
+dbGetQuery(con,
+  "SELECT doctor_id, first_name, last_name
+  FROM doctor
+  WHERE last_name IN ('WILLIAMS', 'DAVIS')"
+)
+```
+
+# Exercise 3
+
+```{r}
+dbGetQuery(con,
+  "SELECT DISTINCT visit_id
+  FROM visit
+  WHERE date(visit_start_date) = '2005-07-05'
+  LIMIT 10"
+)
+```
+
+# Exercise 4
+
+## Exercise 4.1
+
+```{r}
+dbGetQuery(con,
+  "SELECT *
+  FROM payment
+  WHERE amount IN (199, 799, 999)
+  LIMIT 10"
+)
+```
+
+## Exercise 4.2
+
+```{r}
+dbGetQuery(con,
+  "SELECT *
+  FROM payment
+  WHERE amount > 500
+  LIMIT 10"
+)
+```
+
+## Exercise 4.3
+
+```{r}
+dbGetQuery(con,
+  "SELECT *
+  FROM payment
+  WHERE amount > 500 AND amount < 800
+  LIMIT 10"
+)
+```
+
+# Exercise 5
+```{r}
+dbGetQuery(con,
+  "SELECT payment_id, amount
+  FROM payment
+  INNER JOIN patient
+  on payment.patient_id = patient.patient_id
+  WHERE last_name = 'DAVIS'"
+)
+```
+
+# Exercise 6
+
+## Exercise 6.1
+```{r}
+dbGetQuery(con,
+  "SELECT COUNT(*)
+  FROM visit"
+)
+```
+
+## Exercise 6.2
+```{r}
+dbGetQuery(con,
+  "SELECT patient_id, COUNT(*)
+  FROM visit
+  GROUP BY patient_id
+  LIMIT 10"
+)
+```
+
+## Exercise 6.3
+```{r}
+dbGetQuery(con,
+  "SELECT patient_id, COUNT(*)
+  FROM visit
+  GROUP BY patient_id
+  ORDER BY patient_id DESC
+  LIMIT 10"
+)
+```
+
+## Exercise 6.4
+```{r}
+dbGetQuery(con,
+  "SELECT patient_id, COUNT(*)
+  FROM visit
+  GROUP BY patient_id
+  HAVING COUNT(*) >= 40
+  ORDER BY patient_id DESC"
+)
+```
+
+# Exercise 7
+
+```{r}
+dbGetQuery(con,
+  "SELECT MAX(amount), MIN(amount), AVG(amount), SUM(amount)
+  FROM payment"
+)
+```
+
+## Exercise 7.1
+```{r}
+dbGetQuery(con,
+  "SELECT MAX(patient_id), MIN(patient_id), AVG(patient_id), SUM(patient_id)
+  FROM payment"
+)
+```
+
+## Exercise 7.2
+```{r}
+dbGetQuery(con,
+  "SELECT MAX(patient_id), MIN(patient_id), AVG(patient_id), SUM(patient_id)
+  FROM payment
+  WHERE patient_id IN (
+      SELECT patient_id
+      FROM payment
+      GROUP BY patient_id
+      HAVING COUNT(*) > 5
+  )"
+)
+```
+
+# Exercise 8
+
+## Exercise 8.1
+```{r}
+dbGetQuery(con,
+  "SELECT doctor_id, first_name, last_name, AVG(visit_length)
+  FROM (
+    SELECT
+      visit.doctor_id,
+      first_name,
+      last_name,
+      julianday(visit_end_date) - julianday(visit_start_date) AS visit_length
+    FROM doctor
+    INNER JOIN visit
+    ON doctor.doctor_id = visit.doctor_id
+  )
+  GROUP BY doctor_id
+  LIMIT 10"
+)
+```
+
+## Exercise 8.2
+
+```{r}
+dbGetQuery(con,
+  "SELECT doctor_id, first_name, last_name, AVG(visit_length)
+  FROM (
+    SELECT
+      visit.doctor_id,
+      first_name,
+      last_name,
+      julianday(visit_end_date) - julianday(visit_start_date) AS visit_length
+    FROM doctor
+    INNER JOIN visit
+    ON doctor.doctor_id = visit.doctor_id
+  )
+  GROUP BY doctor_id
+  ORDER BY AVG(visit_length) DESC
+  LIMIT 5"
+)
+```
+
+```{r}
+dbGetQuery(con,
+  "SELECT doctor_id, first_name, last_name, AVG(visit_length)
+  FROM (
+    SELECT
+      visit.doctor_id,
+      first_name,
+      last_name,
+      julianday(visit_end_date) - julianday(visit_start_date) AS visit_length
+    FROM doctor
+    INNER JOIN visit
+    ON doctor.doctor_id = visit.doctor_id
+  )
+  GROUP BY doctor_id
+  ORDER BY AVG(visit_length) ASC
+  LIMIT 5"
+)
+```
+
+```{r}
+# clean up
+dbDisconnect(con)
+```
