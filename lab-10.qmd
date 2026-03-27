@@ -268,7 +268,7 @@ cv_states$deathsper100k <- as.numeric(format(round(cv_states$deaths/(cv_states$p
 cv_states$newdeathsper100k <- as.numeric(format(round(cv_states$new_deaths/(cv_states$population/100000),1),nsmall=1))
 
 # add a naive_CFR variable = deaths / cases
-cv_states <- cv_states |> mutate(naive_CFR = round((cv_states$deaths / cv_states$cases),2))
+cv_states <- cv_states |> mutate(naive_CFR = round((cv_states$new_deaths / cv_states$new_cases),2))
 
 # create a `cv_states_today` variable
 cv_states_today <- subset(cv_states, date==max(cv_states$date))
@@ -343,28 +343,28 @@ ggplotly(p)
   - Use the zoom and pan tools to inspect the `naive_CFR` for the states that had an increase in September.
 - Create one more line chart, for Florida only, which shows `new_cases` and `new_deaths` together in one plot. Hint: look for an `add_*()`
   - Use hoverinfo to "eyeball" the approximate peak of deaths and peak of cases. What is the time delay between the peak of cases and the peak of deaths?
-  
 
 ```{r}
 ### FINISH CODE HERE
 # Line chart for naive_CFR for all states over time using `plot_ly()
-cv_states_cfr <- cv_states %>%
-  filter(cv_states$naive_CFR < 1)
 p <- ggplot(cv_states, aes(x = date, y=naive_CFR, group=state),) + geom_line()
 ggplotly(p)
 
 ### FINISH CODE HERE
 # Line chart for Florida showing new_cases and new_deaths together (two lines)
 cv_states |> filter(state=="Florida") |> 
-  plot_ly(x = ~date, y = ~new_cases, type = "scatter", mode = "lines", hoverinfo = 'text') |> 
-  add_lines(x = ~date, y = ~new_deaths, type = "scatter", mode = "lines", hoverinfo = 'text') 
+  plot_ly(x = ~date, y = ~newper100k, type = "scatter", mode = "lines", hoverinfo = 'text') |> 
+  add_lines(x = ~date, y = ~deathsper100k, type = "scatter", mode = "lines", hoverinfo = 'text',
+            text = ~paste( paste(state, ":", sep=""), paste(" Cases per 100k: ", per100k, sep="") , 
+                         paste(" Deaths per 100k: ", deathsper100k, sep=""), sep = "<br>"))
 ```
 
-The peak of cases appears to be in February 2022, which is four months after the peak of deaths in October 2021.
+After hovering over the cases and deaths per 100k people in Florida over time with hoverinfo, the peak of cases appears to be in February 2022 (at 726.8 cases per 100k), which is four months after the peak of deaths in October 2021 (at 9.3 deaths per 100k).
 
 ### 9. Heatmaps
 
 Create a heatmap to visualize `new_cases` for each state on each date greater than June 1st, 2021
+
 - Start by mapping selected features in the dataframe into a matrix using the **tidyr** package function `pivot_wider()`, naming the rows and columns, as done in the lecture notes
 - Use `plot_ly()` to create a heatmap out of this matrix. Which states stand out?
 - Repeat with `newper100k` variable. Now which states stand out? 
@@ -414,6 +414,13 @@ plot_ly(x=colnames(cv_states_mat2), y=rownames(cv_states_mat2),
              type="heatmap",
              showscale=TRUE)
 ```
+
+From the heatmap of new_cases, the state of California stands out as receiving the most new cases (close to 100k) in January 2022.
+
+From the heatmap of newper100k, the state of Rhode Island appeared to have the most cases (nearly 600) per 100k relative to its population.
+
+Finally, the heatmap that shows dates every 2 weeks shows how e.g. Louisiana hit its peak number of cases in mid-August 2021, before Mississippi hit its peak in late August, South Deakota and Texas peaked in early September, and Alabama peaked the latest in October 2021.
+
 
 ### 10. Map
 
@@ -497,8 +504,8 @@ fig_Today <- fig
 
 
 ### Plot together 
-ggplotly(fig_pick.date, fig_Today, nrows = 2, margin = .05)
-
+#ggplotly(fig_pick.date, fig_Today, nrows = 2, margin = .05)
+subplot(fig_pick.date, fig_Today)
 ```
 
-
+From this map, we can see that the cases as of 2021-10-15 are most prevalent in the states of Alaska, Montana, and Wyoming. However, the new cases as of today (2026-03-27) have nearly disappeared completely, to the point where the chart is almost completely white and it is difficult to discern any differences in case counts without hovering over each individual state.
