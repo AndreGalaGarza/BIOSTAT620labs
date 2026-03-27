@@ -1,0 +1,214 @@
+---
+title: "hw3"
+author: "Andre Gala-Garza"
+date: "3/27/2026"
+format: html
+editor: visual
+embed-resources: true
+---
+
+**Disclaimer:** Generative AI was used to assist with templating and writing code in this assignment; however, this code was checked manually and edited by hand to ensure accuracy.
+
+**Source:** OpenAI. (2026). *ChatGPT* \[Large language model\]. <https://chatgpt.com/>.
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+options(tibble.print_min = Inf)
+options(tibble.width = Inf)
+```
+
+```{r}
+library(tidyverse)
+library(tidytext)
+library(dplyr)
+library(textdata)
+```
+
+# Exploratory Data Analysis
+
+```{r}
+pubmed <- read.csv("pubmed.csv")
+```
+
+```{r}
+colnames(pubmed)
+```
+
+```{r}
+head(pubmed$term)
+```
+
+```{r}
+unique(pubmed$term)
+```
+
+```{r}
+head(pubmed$abstract)
+```
+
+# Text Mining
+
+## Problem 1
+
+```{r}
+# Number of articles per search term
+pubmed %>%
+  count(term, sort = TRUE)
+```
+
+From this frequency table, we see that "covid" is the search term with the most articles, followed by "prostate cancer" and "preeclampsia". Meanwhile, "cystic fibrosis" and "meningitis" have significantly fewer search results.
+
+```{r}
+# Most common tokens overall
+pubmed %>%
+  unnest_tokens(token, abstract) %>%
+  count(token, sort = TRUE) %>%
+  head(10)
+```
+
+From this table, we see that nearly all of the most common tokens are stopwords like "and", "the", or "of", which do not provide significant meaning. The most common tokens that are not stopwords are "covid" and "19", highlighting the impact of the COVID-19 pandemic on the content of PubMed articles.
+
+```{r}
+# 5 most common tokens per search term
+pubmed %>%
+  unnest_tokens(token, abstract, drop = FALSE) %>%
+  count(term, token, sort = TRUE) %>%
+  group_by(term) %>%
+  slice_max(n, n = 5, with_ties = FALSE) %>%
+  ungroup()
+```
+
+From viewing the 5 most common tokens per search term, we see that all of them are stopwords except for "covid" and "19" for the search term "covid", and "cancer" and "prostate" for the search term "prostate cancer".
+
+## Problem 2
+
+```{r}
+# Most common tokens while removing stop words
+pubmed %>%
+  unnest_tokens(token, abstract) %>%
+  anti_join(stop_words, by = c("token" = "word")) %>%
+  count(token, sort = TRUE) %>%
+  head(10)
+```
+
+After removing stopwords, we now find that the most common tokens are much more closely related to the search terms themselves, such as "covid", "cancer", "prostate", and "preeclampsia". We also see that "disease" and "treatment" are very common tokens, which make sense because those concepts can be applied to nearly any medical case.
+
+## Problem 3
+
+```{r}
+# Tokenize abstracts into bigrams
+bigrams <- pubmed %>%
+  unnest_tokens(bigram, abstract, token = "ngrams", n = 2)
+
+# 10 most common bigrams
+top_bigrams <- bigrams %>%
+  count(bigram, sort = TRUE) %>%
+  head(10)
+
+top_bigrams
+```
+
+When including stopwords in the abstracts, we find that the most common bigram is "covid 19" (further demonstrating the impact of the COVID-19 pandemic on the content of abstracts), followed by two stopword bigrams, then "prostate cancer" and "pre eclampsia".
+
+```{r}
+# Visualize the 10 most common bigrams
+top_bigrams %>%
+  ggplot(aes(x = reorder(bigram, n), y = n)) +
+  geom_col() +
+  coord_flip() +
+  labs(x = "Bigram", y = "Count", title = "10 Most Common Bigrams")
+```
+
+## Problem 4
+
+```{r}
+# Calculate TF-IDF for each token within each search term
+tf_idf_words <- pubmed %>%
+  unnest_tokens(token, abstract) %>%
+  anti_join(stop_words, by = c("token" = "word")) %>%
+  count(term, token, sort = TRUE) %>%
+  bind_tf_idf(token, term, n)
+
+head(tf_idf_words)
+```
+
+```{r}
+# 5 tokens with the highest TF-IDF for each search term
+tf_idf_words %>%
+  group_by(term) %>%
+  slice_max(tf_idf, n = 5, with_ties = FALSE) %>%
+  ungroup() %>%
+  arrange(term, desc(tf_idf))
+```
+
+The TF-IDF evaluates how important each word in the abstract is to the "document" (the search term). The results in Question 1 instead only tally the frequency of each word for each search term.
+
+The Question 1 results are dominated by very common words such as “the,” “of,” “and,” and “in"; these appear often in every set of abstracts, but do not tell us much about what makes each search term distinctive. By contrast, the TF-IDF results highlight words that are especially characteristic of each search term relative to the others: for example, “covid,” “pandemic,” and “coronavirus” stand out for the covid abstracts, while “cf,” “cftr,” and “sweat” are more specific to cystic fibrosis, and “meningitis,” “meningeal,” and “meninges” are more specific to meningitis. Similarly, “eclampsia” and “preeclampsia” stand out for preeclampsia, and “prostate,” “psa,” and “prostatectomy” stand out for prostate cancer. Overall, the Question 1 results shows the most repeated words, while TF-IDF is more useful for identifying the words that best distinguish one topic from another.
+
+# Sentiment Analysis
+
+## Problem 5
+
+```{r}
+# Sentiment analysis with NRC lexicon
+nrc_sentiments <- pubmed %>%
+  unnest_tokens(token, abstract) %>%
+  inner_join(get_sentiments("nrc"), by = c("token" = "word"))
+
+# Most common sentiment for each search term
+nrc_sentiments %>%
+  count(term, sentiment, sort = TRUE) %>%
+  group_by(term) %>%
+  slice_max(n, n = 1, with_ties = FALSE) %>%
+  ungroup()
+```
+
+With all NRC categories included, covid, cystic fibrosis, and preeclampsia are dominated by “positive,” while meningitis and prostate cancer are dominated by “negative,” which gives a broad sense of tone but not much detail.
+
+
+```{r}
+# Most common sentiment for each search term,
+# removing "positive" and "negative"
+nrc_sentiments %>%
+  filter(!sentiment %in% c("positive", "negative")) %>%
+  count(term, sentiment, sort = TRUE) %>%
+  group_by(term) %>%
+  slice_max(n, n = 1, with_ties = FALSE) %>%
+  ungroup()
+```
+
+After removing those two general categories, more specific emotional patterns appear: covid, meningitis, and prostate cancer are most associated with “fear,” which makes sense given their seriousness and risk; preeclampsia is most associated with “anticipation,” possibly reflecting monitoring, prediction, and prevention in pregnancy care; and cystic fibrosis is most associated with “disgust,” likely because of how certain disease-related terms are classified in the NRC lexicon rather than because the abstracts are written in an emotional style.
+
+## Problem 6
+
+```{r}
+# Create an abstract ID
+pubmed <- pubmed %>%
+  mutate(abstract_id = row_number())
+
+# Get average AFINN sentiment score for each abstract
+afinn <- lexicon_afinn()
+
+afinn_scores <- pubmed %>%
+  unnest_tokens(token, abstract) %>%
+  inner_join(afinn, by = c("token" = "word")) %>%
+  group_by(term, abstract_id) %>%
+  summarize(avg_score = mean(value), .groups = "drop")
+
+head(afinn_scores)
+```
+
+```{r}
+# Visualize average abstract sentiment scores by search term
+afinn_scores %>%
+  ggplot(aes(x = term, y = avg_score)) +
+  geom_boxplot() +
+  labs(
+    x = "Search term",
+    y = "Average AFINN sentiment score",
+    title = "Average abstract sentiment by search term"
+  ) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+The search terms do not appear to be dramatically different overall, since most of the boxplots are centered near zero and have substantial overlap. That suggests the average sentiment of the abstracts is fairly similar across topics. The main exception is cystic fibrosis, which has a noticeably higher median AFINN score than the others, indicating its abstracts tend to be somewhat more positive on average. In contrast, covid, meningitis, preeclampsia, and prostate cancer all have medians that are slightly below zero or close to neutral, with fairly similar spreads. There are also outliers for several terms, showing that some individual abstracts are much more positive or negative than the typical abstract, but these extreme values do not seem to change the overall pattern very much.
