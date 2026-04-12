@@ -1,0 +1,513 @@
+---
+title: "hw4"
+author: "Andre Gala-Garza"
+date: "4/12/2026"
+format: html
+editor: visual
+embed-resources: true
+---
+
+**Disclaimer:** Generative AI was used to assist with templating and writing code in this assignment; however, this code was checked manually and edited by hand to ensure accuracy.
+
+**Source:** OpenAI. (2026). *ChatGPT* \[Large language model\]. <https://chatgpt.com/>.
+
+```{r setup, include=TRUE}
+knitr::opts_chunk$set(echo = TRUE)
+
+options(
+  max.print = 100,
+  tibble.print_max = 10,
+  tibble.width = Inf
+)
+```
+
+```{r}
+library(tidyverse)
+library(dplyr)
+```
+
+# HPC
+
+## Question 1: fun2
+
+```{r}
+# running cumulative sum by row
+fun2 <- function(mat) {
+  n <- nrow(mat)
+  k <- ncol(mat)
+  ans <- mat
+  for (i in 1:n) {
+    for (j in 2:k) {
+      ans[i,j] <- mat[i, j] + ans[i, j - 1]
+    }
+  }
+  ans
+}
+
+fun2alt <- function(mat) {
+  k <- ncol(mat)
+  ans <- mat
+  for (j in 2:k) {
+    ans[, j] <- ans[, j] + ans[, j - 1]
+  }
+  ans
+}
+```
+
+```{r}
+# Use the functions with this data
+set.seed(2315)
+dat <- matrix(rnorm(200 * 100), nrow = 200)
+```
+
+```{r}
+# Check that both functions give the same result
+out1 <- fun2(dat)
+out2 <- fun2alt(dat)
+
+all.equal(out1, out2)
+```
+```{r}
+# Benchmark test
+library(microbenchmark)
+
+mb <- microbenchmark(
+  original = fun2(dat),
+  faster = fun2alt(dat),
+  times = 100
+)
+
+mb
+```
+```{r}
+library(ggplot2)
+
+mb_df <- as.data.frame(mb)
+
+ggplot(mb_df, aes(x = expr, y = time / 1e6)) +
+  geom_boxplot() +
+  labs(
+    title = "Runtime comparison: fun2 vs fun2alt",
+    x = "Function",
+    y = "Runtime (ms)"
+  )
+```
+fun2alt() is faster because it keeps only one loop and performs each cumulative update on a whole column instead of one matrix element at a time, while still returning exactly the same output as fun2().
+
+## Question 2: fun3
+
+```{r}
+fun3 <- function(x) {
+  out <- numeric(length(x))
+  cumsum_x <- 0
+  for (i in seq_along(x)) {
+    if (x[i] == 0) {
+      cumsum_x <- 0
+    } else {
+      cumsum_x <- cumsum_x + x[i] 
+    }
+    out[i] <- cumsum_x
+  }
+  out
+}
+
+fun3alt <- function(x) {
+  cs <- cumsum(x)
+  last_zero <- cummax(seq_along(x) * (x == 0))
+  offset <- numeric(length(x))
+  nz <- last_zero > 0
+  offset[nz] <- cs[last_zero[nz]]
+  cs - offset
+}
+```
+
+```{r}
+# Small example for easy checking
+x_small <- c(3, 2, 1, 0, 5, 4, 0, 2, 2, 1, 0, 7)
+
+# Larger random example
+set.seed(2315)
+x_big <- sample(c(0, -2:-1, 1:5), size = 100000, replace = TRUE)
+```
+
+```{r}
+# Check accuracy
+fun3(x_small)
+fun3alt(x_small)
+
+all.equal(fun3(x_small), fun3alt(x_small))
+all.equal(fun3(x_big), fun3alt(x_big))
+```
+
+```{r}
+# Benchmark test
+library(microbenchmark)
+
+mb <- microbenchmark(
+  original = fun3(x_big),
+  faster = fun3alt(x_big),
+  times = 100
+)
+
+mb
+```
+
+```{r}
+library(ggplot2)
+
+mb_df <- as.data.frame(mb)
+
+ggplot(mb_df, aes(x = expr, y = time / 1e6)) +
+  geom_boxplot() +
+  labs(
+    title = "Runtime comparison: fun3 vs fun3alt",
+    x = "Function",
+    y = "Runtime (ms)"
+  )
+```
+fun3alt() is faster because it replaces the element-by-element R loop with vectorized base R operations (cumsum() and cummax()), which do the work in optimized internal code with less interpreter overhead.
+
+## Question 3: sim_pi
+
+```{r}
+library(parallel)
+
+sim_pi <- function(n = 1000, i = NULL) {
+  p <- matrix(runif(n*2), ncol = 2)
+  mean(rowSums(p^2) < 1) * 4
+}
+
+# Here is an example of the run
+set.seed(156)
+sim_pi(1000) # 3.132
+```
+
+```{r}
+# Serial version
+# This runs the simulation a 4,000 times, each with 10,000 points
+set.seed(1231)
+
+serial_time <- system.time({
+  ans_serial <- unlist(lapply(1:4000, sim_pi, n = 10000))
+  print(mean(ans_serial))
+})
+```
+
+```{r}
+# Parallel version
+n_cores <- max(1, detectCores() - 1)
+cl <- makeCluster(n_cores)
+
+clusterSetRNGStream(cl, 1231)
+clusterExport(cl, "sim_pi")
+
+parallel_time <- system.time({
+  ans_parallel <- unlist(parLapply(cl, 1:4000, sim_pi, n = 10000))
+  print(mean(ans_parallel))
+})
+
+stopCluster(cl)
+```
+```{r}
+# Visualize that both methods give similar estimates of pi
+hist(
+  ans_serial,
+  breaks = 30,
+  freq = FALSE,
+  main = "Pi estimates: serial vs parallel",
+  xlab = "Estimated pi",
+  col = rgb(0, 0, 1, 0.4),
+  xlim = range(c(ans_serial, ans_parallel))
+)
+
+hist(
+  ans_parallel,
+  breaks = 30,
+  freq = FALSE,
+  add = TRUE,
+  col = rgb(1, 0, 0, 0.4)
+)
+
+legend(
+  "topright",
+  legend = c("Serial", "Parallel"),
+  fill = c(rgb(0, 0, 1, 0.4), rgb(1, 0, 0, 0.4))
+)
+```
+```{r}
+# Barplot comparison
+runtime_df <- c(
+  serial = serial_time["elapsed"],
+  parallel = parallel_time["elapsed"]
+)
+
+barplot(
+  runtime_df,
+  main = "Elapsed runtime: serial vs parallel",
+  ylab = "Seconds"
+)
+```
+The parallel version is faster because it distributes the 4000 independent simulation runs across multiple CPU cores so they can be computed simultaneously instead of sequentially.
+
+# SQL
+
+```{r}
+# install.packages(c("RSQLite", "DBI", "readr"))
+
+library(RSQLite)
+library(DBI)
+library(readr)
+
+# Initialize a temporary in memory database
+con <- dbConnect(SQLite(), ":memory:")
+
+# Read in tables
+surveys <- read_csv("surveys.csv")
+species <- read_csv("species.csv")
+plots <- read_csv("plots.csv")
+
+# Copy data.frames to database
+dbWriteTable(con, "surveys", surveys, overwrite = TRUE)
+dbWriteTable(con, "species", species, overwrite = TRUE)
+dbWriteTable(con, "plots", plots, overwrite = TRUE)
+```
+```{r}
+dbListTables(con)
+```
+
+## Question 4: Surveys Summary
+
+```{r}
+dbGetQuery(con,
+  "PRAGMA table_info(surveys)"
+)
+```
+```{r}
+dbGetQuery(con,
+  "SELECT
+    year,
+    month,
+    day,
+    species_id,
+    ROUND(weight / 1000.0, 2) AS weight_kg
+  FROM surveys
+  WHERE year = 1999
+  ORDER BY species_id"
+)
+```
+
+
+## Question 5: Animal Weights
+
+```{r}
+# Weights for all animals in 'surveys'
+dbGetQuery(con,
+  "SELECT
+    year,
+    month,
+    day,
+    species_id,
+    ROUND(weight / 1000.0, 2) AS weight_kg
+  FROM surveys
+  WHERE year = 1999
+  ORDER BY species_id"
+)
+```
+
+## Question 6: Counts and Weights
+
+```{r}
+species_year_summary <- dbGetQuery(con, "
+  SELECT
+    year,
+    species_id,
+    COUNT(*) AS n_counted,
+    AVG(weight) AS avg_weight
+  FROM surveys
+  GROUP BY year, species_id
+  ORDER BY year, species_id
+")
+
+species_year_summary
+```
+
+## Question 7: Number of Species per Taxa
+
+```{r}
+taxa_counts <- dbGetQuery(con, "
+  SELECT
+    taxa,
+    COUNT(*) AS n_species
+  FROM species
+  GROUP BY taxa
+  HAVING COUNT(*) > 10
+  ORDER BY n_species DESC
+")
+
+taxa_counts
+```
+
+## Question 8: Number of Animals per Genus
+
+```{r}
+genus_plot_counts <- dbGetQuery(con, "
+  SELECT
+    s.plot_id,
+    sp.genus,
+    COUNT(*) AS n_caught
+  FROM surveys AS s
+  INNER JOIN species AS sp
+    ON s.species_id = sp.species_id
+  GROUP BY s.plot_id, sp.genus
+  ORDER BY s.plot_id ASC, n_caught DESC
+")
+
+genus_plot_counts
+```
+
+## Question 9: Number of Specimens per Plot
+
+```{r}
+species_plottype_counts <- dbGetQuery(con, "
+  SELECT
+    p.plot_type,
+    s.species_id,
+    sp.genus,
+    sp.species,
+    COUNT(*) AS n_captured
+  FROM surveys AS s
+  INNER JOIN species AS sp
+    ON s.species_id = sp.species_id
+  INNER JOIN plots AS p
+    ON s.plot_id = p.plot_id
+  WHERE s.species_id IS NOT NULL
+    AND LOWER(sp.species) <> 'unknown'
+  GROUP BY p.plot_type, s.species_id, sp.genus, sp.species
+  ORDER BY p.plot_type, n_captured DESC, s.species_id
+")
+
+species_plottype_counts
+```
+
+## Question 10: Average Weight of Rodent Species
+
+```{r}
+rodent_avg_weight <- dbGetQuery(con, "
+  SELECT
+    s.species_id,
+    sp.genus,
+    sp.species,
+    AVG(s.weight) AS avg_weight
+  FROM surveys AS s
+  INNER JOIN species AS sp
+    ON s.species_id = sp.species_id
+  WHERE sp.taxa = 'Rodent'
+  GROUP BY s.species_id, sp.genus, sp.species
+  ORDER BY avg_weight DESC
+")
+
+rodent_avg_weight
+```
+
+## Question 11: Number of Animals per Genus (ggplotly)
+
+```{r}
+library(dplyr)
+library(ggplot2)
+library(plotly)
+
+genus_plot_counts_1_5 <- genus_plot_counts %>%
+  filter(plot_id %in% 1:5)
+
+p <- ggplot(genus_plot_counts_1_5, aes(x = factor(plot_id), y = n_caught, fill = genus)) +
+  geom_col(position = "dodge") +
+  labs(
+    title = "Number of animals caught by genus for plots 1-5",
+    x = "Plot ID",
+    y = "Number caught",
+    fill = "Genus"
+  )
+
+plotly::ggplotly(p)
+```
+
+## Question 12: Counts and Weights (plotly)
+
+```{r}
+library(dplyr)
+library(plotly)
+
+species_year_plot <- species_year_summary %>%
+  filter(!is.na(avg_weight))
+
+plot_ly(
+  data = species_year_plot,
+  x = ~year,
+  y = ~avg_weight,
+  color = ~species_id,
+  type = "scatter",
+  mode = "lines+markers",
+  hovertemplate = paste(
+    "Year: %{x}",
+    "<br>Species: %{color}",
+    "<br>Average weight: %{y:.2f}",
+    "<extra></extra>"
+  )
+) %>%
+  layout(
+    title = "Average species weight over time",
+    xaxis = list(title = "Year"),
+    yaxis = list(title = "Average weight")
+  )
+```
+One potential solution to remove noise in this plot is to keep only species that appear in at least 10 years:
+```{r}
+species_year_plot_clean <- species_year_summary %>%
+  filter(!is.na(avg_weight)) %>%
+  group_by(species_id) %>%
+  filter(n() >= 10) %>%
+  ungroup()
+
+plot_ly(
+  data = species_year_plot_clean,
+  x = ~year,
+  y = ~avg_weight,
+  color = ~species_id,
+  type = "scatter",
+  mode = "lines+markers",
+  hovertemplate = paste(
+    "Year: %{x}",
+    "<br>Species: %{color}",
+    "<br>Average weight: %{y:.2f}",
+    "<extra></extra>"
+  )
+) %>%
+  layout(
+    title = "Average species weight over time (species with at least 10 years of data)",
+    xaxis = list(title = "Year"),
+    yaxis = list(title = "Average weight")
+  )
+```
+
+We can also remove the markers and keep only the lines in the plot:
+```{r}
+plot_ly(
+  data = species_year_plot_clean,
+  x = ~year,
+  y = ~avg_weight,
+  color = ~species_id,
+  type = "scatter",
+  mode = "lines",
+  hovertemplate = paste(
+    "Year: %{x}",
+    "<br>Species: %{color}",
+    "<br>Average weight: %{y:.2f}",
+    "<extra></extra>"
+  )
+) %>%
+  layout(
+    title = "Average species weight over time",
+    xaxis = list(title = "Year"),
+    yaxis = list(title = "Average weight")
+  )
+```
